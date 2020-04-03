@@ -1,0 +1,68 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*-
+
+import json
+import logging
+from datetime import datetime, date, time, timedelta
+
+import requests
+from dateutil.relativedelta import relativedelta
+from airflow import DAG
+from airflow import settings
+from airflow.models import Variable, TaskInstance, DagRun
+from airflow.operators.bash_operator import BashOperator
+from airflow.operators.dummy_operator import DummyOperator
+from airflow.operators.hive_operator import HiveOperator
+from airflow.operators.python_operator import PythonOperator, ShortCircuitOperator
+from airflow.operators.sensors import TimeSensor, TimeDeltaSensor
+from airflow.utils.dates import days_ago
+from airflow.operators.my_mysql_operator import MyMysqlOperator,HelloOperator
+
+TI = TaskInstance
+
+def get_default_params():
+    now = datetime.now()
+    last_month = now + relativedelta(months=-1)
+    return {
+        'yesterday': (now - timedelta(days=1)).strftime("%%Y-%%m-%%d"),
+        'today': now.strftime("%%Y-%%m-%%d"),
+        'this_month': now.strftime("%%Y-%%m"),
+        'this_month_first_day': (now + relativedelta(day=1)).strftime("%%Y-%%m-%%d"),
+        'this_month_last_day': (now + relativedelta(day=31)).strftime("%%Y-%%m-%%d"),
+        'last_month': last_month.strftime("%%Y-%%m"),
+        'last_month_first_day': (last_month + relativedelta(day=1)).strftime("%%Y-%%m-%%d"),
+        'last_month_last_day': (last_month + relativedelta(day=31)).strftime("%%Y-%%m-%%d"),
+    }
+
+
+default_params = get_default_params()
+
+
+default_args = {
+    'owner': 'airflow',
+    'start_date': days_ago(2),
+    'retries': 3,
+    'retry_delay': timedelta(seconds=3),
+    'depends_on_past': False,
+}
+
+
+dag = DAG(
+    '%s', default_args=default_args, params=default_params, concurrency=2, max_active_runs=2, schedule_interval=timedelta(seconds=10))
+
+_ = {}
+
+t1 = HelloOperator(
+    task_id="hello_operator",
+    name="hello_operator",
+    dag=dag
+)
+
+t2 = MyMysqlOperator(
+    task_id="my_mysql_operator",
+    name="my_mysql_operator",
+    mysql_conn_id="airflow_db",
+    dag=dag
+)
+
+t2.set_upstream(t1)
